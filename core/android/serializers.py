@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
-from .models import App
+from .models import App, Request
 from django.contrib.auth.models import User
 
 class AppSerializer(serializers.ModelSerializer):
@@ -34,4 +34,7 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError('Invalid credentials')
         return user
     
-    
+class RequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Request
+        fields = ['id', 'user', 'app', 'screenshot', 'status']

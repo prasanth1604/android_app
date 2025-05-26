@@ -2,29 +2,22 @@ from .serializers import AppSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import UserSignupSerializer, AppSerializer, LoginSerializer
+from .serializers import AppSerializer, RequestSerializer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.contrib.auth import logout
 from rest_framework.authtoken.models import Token
-from .models import App
-from rest_framework.authentication import TokenAuthentication
 from django.contrib.auth import authenticate
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.response import Response
-from rest_framework import status
+from .models import App, Request
 
 class AdminView(APIView):
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
     
     def post(self, request):
+        if not request.user.is_superuser: 
+            return Response({"error": "You do not have permission to create apps."}, status=status.HTTP_403_FORBIDDEN)
         app_icon = request.FILES.get('app_icon')
         app_name = request.POST.get('app_name')
         points = request.POST.get('points')
@@ -38,6 +31,8 @@ class AdminView(APIView):
         return Response({"message": "App created successfully"}, status=status.HTTP_201_CREATED)
     
     def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"error": "You do not have permission to view apps."}, status=status.HTTP_403_FORBIDDEN)
         apps = App.objects.all()
         serializer = AppSerializer(apps, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -93,9 +88,6 @@ class LoginView(APIView):
         else:
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
-
-
-
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
@@ -141,6 +133,55 @@ class UserAvailableAppsView(APIView):
         user_apps = App.objects.all()
         serializer = AppSerializer(user_apps, many=True)
         return Response(serializer.data)
-    
+
+
+class UserRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        app_name = request.data.get('app_name')
+        screenshot = request.FILES.get('screenshot')
+
+        if not app_name or not screenshot:
+            return Response({'error': 'App name and screenshot are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            app = App.objects.get(app_name=app_name)
+        except App.DoesNotExist:
+            return Response({'error': 'App not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        Request.objects.create(
+            user=request.user,
+            app=app,
+            screenshot=screenshot
+        )
+
+        return Response({'message': 'Request created successfully'}, status=status.HTTP_201_CREATED)
+
     
 
+class AdminRequestView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    def get(self, request):
+        if not request.user.is_superuser:
+            return None
+        requests = Request.objects.all()
+        serializer = RequestSerializer(requests, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        if not request.user.is_superuser: 
+            return Response({'error': 'Not authorized'}, status=403)
+
+        request_id = request.data.get('request_id')
+        new_status = request.data.get('status') # 'approved' or 'rejected'
+
+        try:
+            request_obj = Request.objects.get(id=request_id)
+        except Request.DoesNotExist:
+            return Response({'error': 'Request not found'}, status=404)
+
+        request_obj.status = new_status
+        request_obj.save()
+
+        return Response({'message': 'Request status updated'}, status=200)
