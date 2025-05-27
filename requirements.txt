@@ -2,6 +2,4 @@ django
 djangorestframework
 django-cors-headers
 pillow
-django-filter
-djoser 
-djangorestframework-simplejwt
+django-rest-authtoken
