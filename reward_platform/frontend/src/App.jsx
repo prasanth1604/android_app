@@ -257,7 +257,7 @@ const Dashboard = () => {
 
               <img src={DEFAULT_APP_IMAGE} alt={task.app.name} style={styles.appIcon} />
               <div style={styles.appInfo}>
-                <p><strong>App:</strong> {task.app.name}</p> 
+                <p><strong>App:</strong> {task.app}</p> 
                 <p><strong>Status:</strong> {task.is_approved ? <span style={styles.statusApproved}>Approved</span> : <span style={styles.statusPending}>Pending Review</span>}</p>
               </div>
               {task.screenshot && <img src={task.screenshot} alt="Screenshot" style={styles.screenshotSmall} />}
