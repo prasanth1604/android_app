@@ -1,28 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios'; // Import axios
+import axios from 'axios'; 
 
-// --- Axios Setup ---
-const API_BASE_URL = 'http://localhost:8000/api'; // IMPORTANT: Adjust this to your Django backend URL
+const API_BASE_URL = 'http://localhost:8000/api'; 
 
 // Create an Axios instance
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  // Axios will automatically set the correct Content-Type (e.g., multipart/form-data for FormData)
 });
 
-// Add a request interceptor to include the token for authenticated requests
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Only add Authorization header if it's explicitly needed or not overridden
-    if (config.headers.includeAuth !== false) { // Custom header to control auth
+    if (config.headers.includeAuth !== false) { 
       const token = localStorage.getItem('token');
       if (token) {
         config.headers.Authorization = `Token ${token}`;
       }
     }
-    // Remove the custom header so it doesn't get sent to the backend
+
     delete config.headers.includeAuth;
     return config;
   },
@@ -31,30 +27,26 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Add a response interceptor for consistent error handling
+
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
       return Promise.reject(error.response.data);
     } else if (error.request) {
-      // The request was made but no response received
       return Promise.reject({ detail: 'No response from server. Network error or server is down.' });
     } else {
-      // Something happened in setting up the request that triggered an Error
       return Promise.reject({ detail: error.message });
     }
   }
 );
 
 
-// --- 2. Auth/Signup.js ---
+
 const Signup = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState(''); // NEW: State for confirm password
+  const [passwordConfirm, setPasswordConfirm] = useState(''); 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,13 +63,12 @@ const Signup = () => {
     }
 
     try {
-      // Pass a custom header to indicate no auth for this request
       await axiosInstance.post(
         '/auth/signup/',
         {
           username,
           password,
-          password_confirm: passwordConfirm, // NEW: Include password_confirm
+          password_confirm: passwordConfirm, 
           first_name: firstName,
           last_name: lastName,
           email,
@@ -87,7 +78,6 @@ const Signup = () => {
       alert('Signup successful! Please log in.');
       navigate('/login');
     } catch (err) {
-      // Handle backend validation errors more specifically
       if (err.username) {
         setError(`Username: ${err.username[0]}`);
       } else if (err.password) {
@@ -119,8 +109,8 @@ const Signup = () => {
   );
 };
 
-// --- 3. Auth/Login.js ---
-const Login = ({ setIsAuthenticated, setIsAdmin }) => { // Receive props
+
+const Login = ({ setIsAuthenticated, setIsAdmin }) => { 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -130,17 +120,18 @@ const Login = ({ setIsAuthenticated, setIsAdmin }) => { // Receive props
     e.preventDefault();
     setError('');
     try {
-      // Pass a custom header to indicate no auth for this request
       const response = await axiosInstance.post('/auth/login/', { username, password }, { headers: { includeAuth: false } });
       localStorage.setItem('token', response.data.token);
       
-      // Fetch user profile to determine admin status
+
       const userProfile = await axiosInstance.get('/users/me/');
       const isAdminUser = userProfile.data.user.is_staff;
       localStorage.setItem('isAdmin', isAdminUser); 
 
-      setIsAuthenticated(true); // Update parent state
-      setIsAdmin(isAdminUser); // Update parent state
+      setIsAuthenticated(true); 
+      setIsAdmin(isAdminUser); 
+      console.log('Login successful. isAdminUser:', isAdminUser); 
+      console.log('localStorage isAdmin:', localStorage.getItem('isAdmin')); 
 
       navigate('/dashboard');
     } catch (err) {
@@ -163,13 +154,14 @@ const Login = ({ setIsAuthenticated, setIsAdmin }) => { // Receive props
   );
 };
 
-// --- 4. Navbar.js ---
-const Navbar = ({ isAuthenticated, isAdmin, handleLogout }) => { // Receive props
+
+const Navbar = ({ isAuthenticated, isAdmin, handleLogout }) => { 
+  console.log('Navbar render. isAuthenticated:', isAuthenticated, 'isAdmin:', isAdmin); 
   return (
     <nav style={styles.navbar}>
       <ul style={styles.navList}>
         <li style={styles.navItem}><Link to="/" style={styles.navLink}>Home</Link></li>
-        {!isAuthenticated ? ( // Use isAuthenticated prop
+        {!isAuthenticated ? ( 
           <>
             <li style={styles.navItem}><Link to="/login" style={styles.navLink}>Login</Link></li>
             <li style={styles.navItem}><Link to="/signup" style={styles.navLink}>Signup</Link></li>
@@ -178,10 +170,8 @@ const Navbar = ({ isAuthenticated, isAdmin, handleLogout }) => { // Receive prop
           <>
             <li style={styles.navItem}><Link to="/dashboard" style={styles.navLink}>Dashboard</Link></li>
             <li style={styles.navItem}><Link to="/profile" style={styles.navLink}>Profile</Link></li>
-            <li style={styles.navItem}><Link to="/admin/apps" style={styles.navLink}>Manage Apps</Link></li>
-            <li style={styles.navItem}><Link to="/admin/tasks" style={styles.navLink}>Review Tasks</Link></li>
-
-            
+            <li style={styles.navItem}><Link to="/admin/apps" style={styles.navLink}>Manage Apps (Only for Admin)</Link></li> 
+            <li style={styles.navItem}><Link to="/admin/tasks" style={styles.navLink}>Review Tasks (Only for Admin)</Link></li> 
             <li style={styles.navItem}><button onClick={handleLogout} style={styles.logoutButton}>Logout</button></li>
           </>
         )}
@@ -190,18 +180,21 @@ const Navbar = ({ isAuthenticated, isAdmin, handleLogout }) => { // Receive prop
   );
 };
 
-// --- 5. User/Dashboard.js ---
+
 const Dashboard = () => {
   const [apps, setApps] = useState([]);
-  const [userTasks, setUserTasks] = useState([]); // State for user's tasks
+  const [userTasks, setUserTasks] = useState([]);
   const [error, setError] = useState('');
 
+  
+  const DEFAULT_APP_IMAGE = '/android-logo-0.png'; 
+
   useEffect(() => {
-    const fetchData = async () => { // Combined fetch function
+    const fetchData = async () => { 
       try {
         const [appsResponse, tasksResponse] = await Promise.all([
           axiosInstance.get('/apps/'),
-          axiosInstance.get('/tasks/') // Fetch user's tasks
+          axiosInstance.get('/tasks/') 
         ]);
         setApps(appsResponse.data);
         setUserTasks(tasksResponse.data);
@@ -218,18 +211,16 @@ const Dashboard = () => {
     try {
       const response = await axiosInstance.post('/tasks/create/', { app: appId });
       alert(`Task for App ID ${appId} created! Now upload screenshot.`);
-      window.location.href = `/upload/${response.data.id}`; // Redirect to upload with task ID
+      window.location.href = `/upload/${response.data.id}`; 
     } catch (err) {
       setError(err.detail || 'Failed to start task.');
       console.error('Error creating task:', err);
     }
   };
 
-  // Filter apps: only show apps that the user has NOT completed and had approved
   const approvedAppIds = userTasks
     .filter(task => task.is_approved)
-    .map(task => task.app.id); // Assuming task.app is an object with an 'id' property
-
+    .map(task => task.app.id); 
   const availableApps = apps.filter(app => !approvedAppIds.includes(app.id));
 
 
@@ -238,7 +229,6 @@ const Dashboard = () => {
       <h2>Dashboard</h2>
       {error && <p style={styles.errorMessage}>{error}</p>}
       
-      {/* Section for Available Apps */}
       <h3>Available Apps</h3>
       {availableApps.length === 0 ? (
         <p>No new apps available. You've completed all tasks or there are no apps to display.</p>
@@ -246,14 +236,17 @@ const Dashboard = () => {
         <ul style={styles.list}>
           {availableApps.map(app => (
             <li key={app.id} style={styles.listItem}>
-              {app.name} - {app.points} Points
+              <img src={DEFAULT_APP_IMAGE} alt={app.name} style={styles.appIcon} />
+              <div style={styles.appInfo}>
+                <p><strong>{app.name}</strong></p>
+                <p>{app.points} Points</p>
+              </div>
               <button onClick={() => handleStartTask(app.id)} style={styles.smallButton}>Download & Upload</button>
             </li>
           ))}
         </ul>
       )}
 
-      {/* Section for My Downloaded/Completed Apps */}
       <h3 style={{marginTop: '40px'}}>My Downloaded Apps</h3>
       {userTasks.length === 0 ? (
         <p>You haven't downloaded any apps yet.</p>
@@ -261,8 +254,13 @@ const Dashboard = () => {
         <ul style={styles.list}>
           {userTasks.map(task => (
             <li key={task.id} style={styles.listItem}>
-              <p><strong>App:</strong> {task.app}</p> {/* Access app name from nested object */}
-              <p><strong>Status:</strong> {task.is_approved ? <span style={styles.statusApproved}>Approved</span> : <span style={styles.statusPending}>Pending Review</span>}</p>
+
+              <img src={DEFAULT_APP_IMAGE} alt={task.app.name} style={styles.appIcon} />
+              <div style={styles.appInfo}>
+                <p><strong>App:</strong> {task.app.name}</p> 
+                <p><strong>Status:</strong> {task.is_approved ? <span style={styles.statusApproved}>Approved</span> : <span style={styles.statusPending}>Pending Review</span>}</p>
+              </div>
+              {task.screenshot && <img src={task.screenshot} alt="Screenshot" style={styles.screenshotSmall} />}
             </li>
           ))}
         </ul>
@@ -271,7 +269,7 @@ const Dashboard = () => {
   );
 };
 
-// --- 6. User/Profile.js ---
+
 const Profile = () => {
   const [profile, setProfile] = useState(null);
   const [firstName, setFirstName] = useState('');
@@ -285,7 +283,6 @@ const Profile = () => {
         setProfile(response.data);
         setFirstName(response.data.user.first_name || '');
         setLastName(response.data.user.last_name || '');
-        // Update isAdmin status in localStorage based on fetched profile
         localStorage.setItem('isAdmin', response.data.user.is_staff);
       } catch (err) {
         setError(err.detail || 'Failed to load profile.');
@@ -321,7 +318,7 @@ const Profile = () => {
         <p><strong>Username:</strong> {profile.user.username}</p>
         <p><strong>Full Name:</strong> {profile.user.first_name} {profile.user.last_name}</p>
         <p><strong>Points Earned:</strong> {profile.points_earned}</p>
-        <p><strong>Admin Status:</strong> {profile.user.is_staff ? 'Yes' : 'No'}</p>
+        <p><strong>Superuser Status:</strong> {profile.user.is_staff ? 'Yes' : 'No'}</p> {/* Changed */}
       </div>
       <h3 style={{marginTop: '20px'}}>Edit Profile</h3>
       <div style={styles.form}>
@@ -397,6 +394,8 @@ const AdminApps = () => {
   const [newPoints, setNewPoints] = useState('');
   const [error, setError] = useState('');
 
+  const DEFAULT_APP_IMAGE = '/android-logo-0.png'; 
+
   const fetchApps = async () => {
     try {
       const response = await axiosInstance.get('/admin/apps/');
@@ -440,7 +439,7 @@ const AdminApps = () => {
 
   return (
     <div style={styles.container}>
-      <h2>Manage Apps</h2>
+      <h2>Manage Apps (Superuser)</h2> {/* Changed */}
       {error && <p style={styles.errorMessage}>{error}</p>}
       <h3 style={{marginTop: '20px'}}>Add New App</h3>
       <form onSubmit={handleAddApp} style={styles.form}>
@@ -455,7 +454,8 @@ const AdminApps = () => {
         <ul style={styles.list}>
           {apps.map(app => (
             <li key={app.id} style={styles.listItem}>
-              {app.name} - {app.points} Points
+              <img src={DEFAULT_APP_IMAGE} alt={app.name} style={styles.appIcon} />
+              <strong>{app.name}</strong> - {app.points} Points
               <button onClick={() => handleDeleteApp(app.id)} style={styles.smallButton}>Delete</button>
             </li>
           ))}
@@ -469,6 +469,7 @@ const AdminApps = () => {
 const AdminTasks = () => {
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState('');
+  const [showPendingOnly, setShowPendingOnly] = useState(false); // NEW: State for filtering
 
   const fetchTasks = async () => {
     try {
@@ -510,21 +511,42 @@ const AdminTasks = () => {
     }
   };
 
+  // Filter tasks based on showPendingOnly state
+  const filteredTasks = showPendingOnly ? tasks.filter(task => !task.is_approved) : tasks;
+
   return (
     <div style={styles.container}>
-      <h2>Review Submitted Tasks</h2>
+      <h2>Review Submitted Tasks (Superuser)</h2> {/* Changed */}
       {error && <p style={styles.errorMessage}>{error}</p>}
-      {tasks.length === 0 ? (
-        <p>No tasks submitted for review.</p>
+
+      <div style={styles.buttonGroup} className="task-filter-buttons"> {/* NEW: Filter buttons */}
+        <button
+          onClick={() => setShowPendingOnly(false)}
+          style={{ ...styles.smallButton, ...(showPendingOnly ? {} : styles.activeFilterButton) }}
+        >
+          All Tasks
+        </button>
+        <button
+          onClick={() => setShowPendingOnly(true)}
+          style={{ ...styles.smallButton, ...(showPendingOnly ? styles.activeFilterButton : {}) }}
+        >
+          Pending Tasks
+        </button>
+      </div>
+
+      {filteredTasks.length === 0 ? (
+        <p>{showPendingOnly ? 'No pending tasks.' : 'No tasks submitted for review.'}</p>
       ) : (
         <ul style={styles.list}>
-          {tasks.map(task => (
+          {filteredTasks.map(task => (
             <li key={task.id} style={styles.listItem}>
               <p><strong>User:</strong> {task.user}</p>
               <p><strong>App:</strong> {task.app}</p>
-              {task.screenshot && (
+              <div>
+                {task.screenshot && (
                 <img src={task.screenshot} alt="Screenshot" style={styles.screenshot} />
-              )}
+                )}
+              </div>
               <p><strong>Submitted At:</strong> {new Date(task.completed_at).toLocaleString()}</p>
               {!task.is_approved && (
                 <div style={styles.buttonGroup}>
@@ -588,23 +610,23 @@ const App = () => {
 const styles = {
   appContainer: {
     fontFamily: 'Inter, sans-serif',
-    backgroundColor: '#f0f2f5', /* Lighter background */
+    backgroundColor: '#f0f2f5', 
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center', /* Center content horizontally */
-    padding: '20px', /* Add some overall padding */
-    boxSizing: 'border-box', /* Include padding in element's total width and height */
+    alignItems: 'center', 
+    padding: '20px',
+    boxSizing: 'border-box', 
   },
   container: {
     backgroundColor: '#ffffff',
     padding: '30px',
-    borderRadius: '12px', /* More rounded corners */
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)', /* Stronger shadow */
+    borderRadius: '12px', 
+    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)', 
     marginTop: '40px',
-    marginBottom: '40px', /* Add bottom margin for spacing */
-    width: '100%', /* Take full width up to maxWidth */
-    maxWidth: '650px', /* Slightly wider */
+    marginBottom: '40px', 
+    width: '100%',
+    maxWidth: '650px', 
     textAlign: 'center',
     boxSizing: 'border-box',
   },
@@ -691,12 +713,12 @@ const styles = {
   },
   navbar: {
     width: '100%',
-    backgroundColor: '#212529', /* Darker navbar */
-    padding: '18px 0', /* More vertical padding */
+    backgroundColor: '#212529', 
+    padding: '18px 0', 
     boxShadow: '0 3px 8px rgba(0, 0, 0, 0.2)',
-    position: 'sticky', /* Make navbar sticky */
+    position: 'sticky', 
     top: 0,
-    zIndex: 1000, /* Ensure it stays on top */
+    zIndex: 1000, 
   },
   navList: {
     listStyle: 'none',
@@ -704,15 +726,15 @@ const styles = {
     justifyContent: 'center',
     margin: 0,
     padding: 0,
-    flexWrap: 'wrap', /* Allow items to wrap on smaller screens */
+    flexWrap: 'wrap',
   },
   navItem: {
-    margin: '0 18px', /* More spacing */
+    margin: '0 18px', 
   },
   navLink: {
     color: 'white',
     textDecoration: 'none',
-    fontSize: '18px', /* Larger font */
+    fontSize: '18px', 
     padding: '10px 15px',
     borderRadius: '6px',
     transition: 'background-color 0.3s ease, color 0.3s ease',
@@ -733,10 +755,10 @@ const styles = {
   dropzone: {
     border: '2px dashed #007bff',
     borderRadius: '10px',
-    padding: '50px', /* More padding */
+    padding: '50px', 
     textAlign: 'center',
     cursor: 'pointer',
-    backgroundColor: '#f0f8ff', /* Lighter blue background */
+    backgroundColor: '#f0f8ff', 
     color: '#007bff',
     marginBottom: '25px',
     transition: 'background-color 0.3s ease, border-color 0.3s ease',
@@ -752,7 +774,7 @@ const styles = {
     marginTop: '15px',
     boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
   },
-  screenshotSmall: { /* NEW: Smaller screenshot for list items */
+  screenshotSmall: { 
     maxWidth: '100px',
     height: 'auto',
     borderRadius: '5px',
@@ -770,8 +792,8 @@ const styles = {
     borderRadius: '10px',
     marginBottom: '15px',
     display: 'flex',
-    flexDirection: 'column', /* Stack content vertically */
-    alignItems: 'flex-start', /* Align text to the left */
+    flexDirection: 'column', 
+    alignItems: 'flex-start', 
     boxShadow: '0 3px 8px rgba(0, 0, 0, 0.08)',
     textAlign: 'left',
   },
@@ -780,7 +802,7 @@ const styles = {
     fontWeight: 'bold',
     marginTop: '10px',
   },
-  statusPending: { /* NEW: Style for pending status */
+  statusPending: { 
     color: '#ffc107',
     fontWeight: 'bold',
     marginTop: '10px',
@@ -789,8 +811,26 @@ const styles = {
     display: 'flex',
     gap: '10px',
     marginTop: '15px',
-    width: '100%', /* Take full width */
-    justifyContent: 'center', /* Center buttons in group */
+    width: '100%', 
+    justifyContent: 'center', 
+  },
+  activeFilterButton: { 
+    backgroundColor: '#007bff',
+    color: 'white',
+    borderColor: '#007bff',
+  },
+  appIcon: {
+    width: '60px',
+    height: '60px',
+    borderRadius: '12px',
+    objectFit: 'cover',
+    marginRight: '15px',
+    border: '1px solid #e0e0e0',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+  },
+  appInfo: { 
+    flexGrow: 1,
+    textAlign: 'left',
   }
 };
 

@@ -4,7 +4,6 @@ from django.contrib.auth.models import User
 class App(models.Model):
     name = models.CharField(max_length=255)
     points = models.IntegerField()
-    icon = models.ImageField(default= '/android-logo-0.png', blank=True, null=True)
 
     def __str__(self):
         return self.name
