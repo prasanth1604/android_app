@@ -9,9 +9,7 @@ const API_BASE_URL = 'http://localhost:8000/api'; // IMPORTANT: Adjust this to y
 // Create an Axios instance
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Axios will automatically set the correct Content-Type (e.g., multipart/form-data for FormData)
 });
 
 // Add a request interceptor to include the token for authenticated requests
@@ -42,7 +40,7 @@ axiosInstance.interceptors.response.use(
       // that falls out of the range of 2xx
       return Promise.reject(error.response.data);
     } else if (error.request) {
-      // The request was made but no response was received
+      // The request was made but no response received
       return Promise.reject({ detail: 'No response from server. Network error or server is down.' });
     } else {
       // Something happened in setting up the request that triggered an Error
@@ -122,7 +120,7 @@ const Signup = () => {
 };
 
 // --- 3. Auth/Login.js ---
-const Login = () => {
+const Login = ({ setIsAuthenticated, setIsAdmin }) => { // Receive props
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -135,9 +133,15 @@ const Login = () => {
       // Pass a custom header to indicate no auth for this request
       const response = await axiosInstance.post('/auth/login/', { username, password }, { headers: { includeAuth: false } });
       localStorage.setItem('token', response.data.token);
+      
       // Fetch user profile to determine admin status
       const userProfile = await axiosInstance.get('/users/me/');
-      localStorage.setItem('isAdmin', userProfile.data.user.is_staff); // Assuming backend sends is_staff
+      const isAdminUser = userProfile.data.user.is_staff;
+      localStorage.setItem('isAdmin', isAdminUser); 
+
+      setIsAuthenticated(true); // Update parent state
+      setIsAdmin(isAdminUser); // Update parent state
+
       navigate('/dashboard');
     } catch (err) {
       setError(err.detail || 'Login failed. Invalid credentials.');
@@ -160,21 +164,12 @@ const Login = () => {
 };
 
 // --- 4. Navbar.js ---
-const Navbar = () => {
-  const isLoggedIn = !!localStorage.getItem('token');
-  const isAdmin = localStorage.getItem('isAdmin') === 'true';
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('isAdmin');
-    window.location.href = '/login'; // Simple redirect
-  };
-
+const Navbar = ({ isAuthenticated, isAdmin, handleLogout }) => { // Receive props
   return (
     <nav style={styles.navbar}>
       <ul style={styles.navList}>
         <li style={styles.navItem}><Link to="/" style={styles.navLink}>Home</Link></li>
-        {!isLoggedIn ? (
+        {!isAuthenticated ? ( // Use isAuthenticated prop
           <>
             <li style={styles.navItem}><Link to="/login" style={styles.navLink}>Login</Link></li>
             <li style={styles.navItem}><Link to="/signup" style={styles.navLink}>Signup</Link></li>
@@ -183,12 +178,10 @@ const Navbar = () => {
           <>
             <li style={styles.navItem}><Link to="/dashboard" style={styles.navLink}>Dashboard</Link></li>
             <li style={styles.navItem}><Link to="/profile" style={styles.navLink}>Profile</Link></li>
-            {isAdmin && (
-              <>
-                <li style={styles.navItem}><Link to="/admin/apps" style={styles.navLink}>Manage Apps</Link></li>
-                <li style={styles.navItem}><Link to="/admin/tasks" style={styles.navLink}>Review Tasks</Link></li>
-              </>
-            )}
+            <li style={styles.navItem}><Link to="/admin/apps" style={styles.navLink}>Manage Apps</Link></li>
+            <li style={styles.navItem}><Link to="/admin/tasks" style={styles.navLink}>Review Tasks</Link></li>
+
+            
             <li style={styles.navItem}><button onClick={handleLogout} style={styles.logoutButton}>Logout</button></li>
           </>
         )}
@@ -200,19 +193,24 @@ const Navbar = () => {
 // --- 5. User/Dashboard.js ---
 const Dashboard = () => {
   const [apps, setApps] = useState([]);
+  const [userTasks, setUserTasks] = useState([]); // State for user's tasks
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchApps = async () => {
+    const fetchData = async () => { // Combined fetch function
       try {
-        const response = await axiosInstance.get('/apps/');
-        setApps(response.data);
+        const [appsResponse, tasksResponse] = await Promise.all([
+          axiosInstance.get('/apps/'),
+          axiosInstance.get('/tasks/') // Fetch user's tasks
+        ]);
+        setApps(appsResponse.data);
+        setUserTasks(tasksResponse.data);
       } catch (err) {
-        setError(err.detail || 'Failed to load apps.');
-        console.error('Error fetching apps:', err);
+        setError(err.detail || 'Failed to load data.');
+        console.error('Error fetching dashboard data:', err);
       }
     };
-    fetchApps();
+    fetchData();
   }, []);
 
   const handleStartTask = async (appId) => {
@@ -227,19 +225,44 @@ const Dashboard = () => {
     }
   };
 
+  // Filter apps: only show apps that the user has NOT completed and had approved
+  const approvedAppIds = userTasks
+    .filter(task => task.is_approved)
+    .map(task => task.app.id); // Assuming task.app is an object with an 'id' property
+
+  const availableApps = apps.filter(app => !approvedAppIds.includes(app.id));
+
+
   return (
     <div style={styles.container}>
       <h2>Dashboard</h2>
       {error && <p style={styles.errorMessage}>{error}</p>}
+      
+      {/* Section for Available Apps */}
       <h3>Available Apps</h3>
-      {apps.length === 0 ? (
-        <p>No apps available.</p>
+      {availableApps.length === 0 ? (
+        <p>No new apps available. You've completed all tasks or there are no apps to display.</p>
       ) : (
         <ul style={styles.list}>
-          {apps.map(app => (
+          {availableApps.map(app => (
             <li key={app.id} style={styles.listItem}>
               {app.name} - {app.points} Points
               <button onClick={() => handleStartTask(app.id)} style={styles.smallButton}>Download & Upload</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Section for My Downloaded/Completed Apps */}
+      <h3 style={{marginTop: '40px'}}>My Downloaded Apps</h3>
+      {userTasks.length === 0 ? (
+        <p>You haven't downloaded any apps yet.</p>
+      ) : (
+        <ul style={styles.list}>
+          {userTasks.map(task => (
+            <li key={task.id} style={styles.listItem}>
+              <p><strong>App:</strong> {task.app}</p> {/* Access app name from nested object */}
+              <p><strong>Status:</strong> {task.is_approved ? <span style={styles.statusApproved}>Approved</span> : <span style={styles.statusPending}>Pending Review</span>}</p>
             </li>
           ))}
         </ul>
@@ -339,8 +362,8 @@ const UploadScreenshot = () => {
 
     setError('');
     try {
-      // Axios automatically sets Content-Type for FormData
-      await axiosInstance.post(`/tasks/${taskId}/screenshots/`, formData);
+      // CHANGED: Use axiosInstance.put instead of axiosInstance.post for updates
+      await axiosInstance.put(`/tasks/${taskId}/screenshots/`, formData);
       alert('Screenshot uploaded successfully!');
       navigate('/dashboard');
     } catch (err) {
@@ -520,14 +543,36 @@ const AdminTasks = () => {
 
 // --- 10. App.js ---
 const App = () => {
+  // State to manage authentication status globally
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+
+  // Function to handle logout, passed to Navbar
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('isAdmin');
+    setIsAuthenticated(false);
+    setIsAdmin(false);
+    window.location.href = '/login'; // Redirect to login
+  };
+
+  // Effect to re-check auth status on mount (e.g., on page refresh)
+  useEffect(() => {
+    setIsAuthenticated(!!localStorage.getItem('token'));
+    setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+  }, []);
+
+
   return (
     <Router>
       <div style={styles.appContainer}>
-        <Navbar />
+        {/* Pass auth states and logout handler to Navbar */}
+        <Navbar isAuthenticated={isAuthenticated} isAdmin={isAdmin} handleLogout={handleLogout} />
         <Routes>
           <Route path="/" element={<div style={styles.container}><h1>Welcome to the Reward Platform!</h1></div>} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/login" element={<Login />} />
+          {/* Pass setIsAuthenticated and setIsAdmin to Login */}
+          <Route path="/login" element={<Login setIsAuthenticated={setIsAuthenticated} setIsAdmin={setIsAdmin} />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/upload/:taskId" element={<UploadScreenshot />} />
@@ -543,84 +588,115 @@ const App = () => {
 const styles = {
   appContainer: {
     fontFamily: 'Inter, sans-serif',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f0f2f5', /* Lighter background */
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    alignItems: 'center', /* Center content horizontally */
+    padding: '20px', /* Add some overall padding */
+    boxSizing: 'border-box', /* Include padding in element's total width and height */
   },
   container: {
     backgroundColor: '#ffffff',
     padding: '30px',
-    borderRadius: '10px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    borderRadius: '12px', /* More rounded corners */
+    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)', /* Stronger shadow */
     marginTop: '40px',
-    width: '90%',
-    maxWidth: '600px',
+    marginBottom: '40px', /* Add bottom margin for spacing */
+    width: '100%', /* Take full width up to maxWidth */
+    maxWidth: '650px', /* Slightly wider */
     textAlign: 'center',
+    boxSizing: 'border-box',
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '15px',
-    marginBottom: '20px',
+    gap: '18px', /* More spacing */
+    marginBottom: '25px',
+    alignItems: 'center', /* Center form elements */
   },
   input: {
-    padding: '12px',
+    padding: '14px', /* More padding */
     borderRadius: '8px',
-    border: '1px solid #ced4da',
+    border: '1px solid #cdd4da', /* Slightly softer border */
     fontSize: '16px',
-    width: 'calc(100% - 24px)',
+    width: 'calc(100% - 28px)', /* Adjust width for padding */
+    maxWidth: '400px', /* Limit input width */
+    boxSizing: 'border-box',
   },
   button: {
-    padding: '12px 20px',
+    padding: '14px 25px', /* More padding */
     borderRadius: '8px',
     border: 'none',
     backgroundColor: '#007bff',
     color: 'white',
-    fontSize: '16px',
+    fontSize: '17px', /* Slightly larger font */
+    fontWeight: '600', /* Bolder font */
     cursor: 'pointer',
-    transition: 'background-color 0.3s ease',
+    transition: 'background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease',
+    boxShadow: '0 4px 8px rgba(0, 123, 255, 0.2)', /* Button shadow */
+  },
+  'button:hover': {
+    backgroundColor: '#0056b3',
+    transform: 'translateY(-2px)', /* Lift effect */
+    boxShadow: '0 6px 12px rgba(0, 123, 255, 0.3)',
   },
   smallButton: {
-    padding: '8px 12px',
-    borderRadius: '5px',
+    padding: '10px 15px', /* More padding */
+    borderRadius: '6px', /* Slightly more rounded */
     border: '1px solid #007bff',
     backgroundColor: '#e9f5ff',
     color: '#007bff',
     fontSize: '14px',
     cursor: 'pointer',
-    marginLeft: '10px',
-    transition: 'background-color 0.3s ease, color 0.3s ease',
+    marginLeft: '12px', /* More spacing */
+    transition: 'background-color 0.3s ease, color 0.3s ease, transform 0.2s ease',
+  },
+  'smallButton:hover': {
+    backgroundColor: '#007bff',
+    color: 'white',
+    transform: 'translateY(-1px)',
   },
   logoutButton: {
-    padding: '12px 20px',
+    padding: '14px 25px',
     borderRadius: '8px',
     border: 'none',
     backgroundColor: '#dc3545',
     color: 'white',
-    fontSize: '16px',
+    fontSize: '17px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'background-color 0.3s ease',
+    transition: 'background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease',
+    boxShadow: '0 4px 8px rgba(220, 53, 69, 0.2)',
+  },
+  'logoutButton:hover': {
+    backgroundColor: '#c82333',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 6px 12px rgba(220, 53, 69, 0.3)',
   },
   errorMessage: {
     color: '#dc3545',
-    marginTop: '10px',
-    fontSize: '14px',
+    marginTop: '15px',
+    fontSize: '15px',
+    fontWeight: 'bold',
   },
   linkText: {
-    marginTop: '15px',
-    fontSize: '14px',
+    marginTop: '20px',
+    fontSize: '15px',
   },
   link: {
     color: '#007bff',
     textDecoration: 'none',
+    fontWeight: '600',
   },
   navbar: {
     width: '100%',
-    backgroundColor: '#343a40',
-    padding: '15px 0',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    backgroundColor: '#212529', /* Darker navbar */
+    padding: '18px 0', /* More vertical padding */
+    boxShadow: '0 3px 8px rgba(0, 0, 0, 0.2)',
+    position: 'sticky', /* Make navbar sticky */
+    top: 0,
+    zIndex: 1000, /* Ensure it stays on top */
   },
   navList: {
     listStyle: 'none',
@@ -628,66 +704,93 @@ const styles = {
     justifyContent: 'center',
     margin: 0,
     padding: 0,
+    flexWrap: 'wrap', /* Allow items to wrap on smaller screens */
   },
   navItem: {
-    margin: '0 15px',
+    margin: '0 18px', /* More spacing */
   },
   navLink: {
     color: 'white',
     textDecoration: 'none',
-    fontSize: '17px',
-    padding: '8px 12px',
-    borderRadius: '5px',
-    transition: 'background-color 0.3s ease',
+    fontSize: '18px', /* Larger font */
+    padding: '10px 15px',
+    borderRadius: '6px',
+    transition: 'background-color 0.3s ease, color 0.3s ease',
+  },
+  'navLink:hover': {
+    backgroundColor: '#343a40',
+    color: '#007bff',
   },
   profileInfo: {
     textAlign: 'left',
-    marginBottom: '20px',
-    padding: '15px',
+    marginBottom: '25px',
+    padding: '20px',
     border: '1px solid #e9ecef',
-    borderRadius: '8px',
+    borderRadius: '10px',
     backgroundColor: '#f8f9fa',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
   },
   dropzone: {
     border: '2px dashed #007bff',
-    borderRadius: '8px',
-    padding: '40px',
+    borderRadius: '10px',
+    padding: '50px', /* More padding */
     textAlign: 'center',
     cursor: 'pointer',
-    backgroundColor: '#e9f5ff',
+    backgroundColor: '#f0f8ff', /* Lighter blue background */
     color: '#007bff',
-    marginBottom: '20px',
+    marginBottom: '25px',
     transition: 'background-color 0.3s ease, border-color 0.3s ease',
+  },
+  'dropzone:hover': {
+    backgroundColor: '#e0f0ff',
+    borderColor: '#0056b3',
   },
   screenshot: {
     maxWidth: '100%',
     height: 'auto',
     borderRadius: '8px',
+    marginTop: '15px',
+    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
+  },
+  screenshotSmall: { /* NEW: Smaller screenshot for list items */
+    maxWidth: '100px',
+    height: 'auto',
+    borderRadius: '5px',
     marginTop: '10px',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
   },
   list: {
     listStyle: 'none',
-    padding: 0,
+    padding: '0',
+    marginTop: '20px',
   },
   listItem: {
     backgroundColor: '#f8f9fa',
-    padding: '15px',
-    borderRadius: '8px',
-    marginBottom: '10px',
+    padding: '18px',
+    borderRadius: '10px',
+    marginBottom: '15px',
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.05)',
+    flexDirection: 'column', /* Stack content vertically */
+    alignItems: 'flex-start', /* Align text to the left */
+    boxShadow: '0 3px 8px rgba(0, 0, 0, 0.08)',
     textAlign: 'left',
   },
   statusApproved: {
     color: '#28a745',
     fontWeight: 'bold',
+    marginTop: '10px',
+  },
+  statusPending: { /* NEW: Style for pending status */
+    color: '#ffc107',
+    fontWeight: 'bold',
+    marginTop: '10px',
   },
   buttonGroup: {
     display: 'flex',
     gap: '10px',
+    marginTop: '15px',
+    width: '100%', /* Take full width */
+    justifyContent: 'center', /* Center buttons in group */
   }
 };
 
